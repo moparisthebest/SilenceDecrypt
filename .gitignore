@@ -1,0 +1,5 @@
+target/
+*.db
+SecureSMS-Preferences.xml
+.idea
+*.iml
