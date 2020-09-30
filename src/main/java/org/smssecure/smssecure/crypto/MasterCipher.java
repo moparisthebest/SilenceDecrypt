@@ -67,6 +67,15 @@ public class MasterCipher {
     return encryptAndEncodeBytes(body.getBytes());
   }
 
+  public String tryDecryptBody(String body) {
+    try {
+      return new String(decodeAndDecryptBytes(body));
+    } catch(Throwable e) {
+      // ignore this, probably already decrypted, or we can't do anything about it anyhow
+      return body;
+    }
+  }
+
   public String decryptBody(String body) {
     return new String(decodeAndDecryptBytes(body));
   }

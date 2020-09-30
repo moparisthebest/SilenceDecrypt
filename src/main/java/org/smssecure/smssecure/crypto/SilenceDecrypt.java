@@ -18,9 +18,10 @@ package org.smssecure.smssecure.crypto;
 
 import com.moparisthebest.jdbc.codegen.JdbcMapperFactory;
 import com.moparisthebest.jdbc.util.ResultSetIterable;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
-import java.security.Security;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -33,10 +34,31 @@ public class SilenceDecrypt {
         if (args.length > 0) {
             passphrase = args[0];
         }
-        final var masterSecret = MasterSecretUtil.getMasterSecret("SecureSMS-Preferences.xml", passphrase);
+        final var silenceExportDir = new File("SilenceExport");
+        final var appPartsDir = new File(silenceExportDir, "app_parts");
+        final var masterSecret = MasterSecretUtil.getMasterSecret(new File(silenceExportDir, "shared_prefs/SecureSMS-Preferences.xml"), passphrase);
+        final var messagesDbOrigPath = new File(silenceExportDir, "databases/messages.db").toPath();
+        final var messagesDbFilePath = "messages.db";
+        final var outDir = new File("app_parts");
+        outDir.mkdirs();
+
+        // copy original database here to modify
+        Files.copy(messagesDbOrigPath, Path.of(messagesDbFilePath));
+
         final var masterCipher = new MasterCipher(masterSecret);
 
-        try (var conn = DriverManager.getConnection("jdbc:sqlite:messages.db");
+        final var mmsFiles = appPartsDir.listFiles((f, n) -> n.toLowerCase().endsWith(".mms"));
+        if (mmsFiles != null) {
+            for (final var file : mmsFiles) {
+                final var encryptedBytes = Files.readAllBytes(file.toPath());
+                //System.out.println(part + Arrays.toString(encryptedBytes));
+                final var decryptedBytes = masterCipher.decryptBytes(encryptedBytes);
+                final var attachmentFile = new File(outDir, file.getName());
+                Files.write(attachmentFile.toPath(), decryptedBytes);
+            }
+        }
+
+        try (var conn = DriverManager.getConnection("jdbc:sqlite:" + messagesDbFilePath);
              var dao = JdbcMapperFactory.create(MessagesDao.class, conn)) {
             decrypt(masterCipher, dao::getSms, msg -> dao.updateSms(msg.id, msg.body));
             decrypt(masterCipher, dao::getMms, msg -> dao.updateMms(msg.id, msg.body));
@@ -58,17 +80,6 @@ public class SilenceDecrypt {
                     update.accept(msg);
                 }
             }
-        }
-    }
-
-    static {
-        //Since Java 9 we set the unlimited crypto policy in code, not by applying the JCE jars.
-        Security.setProperty("crypto.policy", "unlimited");
-        //verify that JCE is applied
-
-        // init the BC security provider
-        if (Security.getProvider("BC") == null) {
-            Security.insertProviderAt(new BouncyCastleProvider(), 0);
         }
     }
 }

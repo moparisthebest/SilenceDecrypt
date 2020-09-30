@@ -17,6 +17,7 @@
  */
 package org.smssecure.smssecure.crypto;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
@@ -25,6 +26,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Base64;
@@ -55,9 +57,19 @@ public class MasterSecretUtil {
     private static final String ASYMMETRIC_LOCAL_PUBLIC_DJB = "asymmetric_master_secret_curve25519_public";
     private static final String ASYMMETRIC_LOCAL_PRIVATE_DJB = "asymmetric_master_secret_curve25519_private";
 
-    public static MasterSecret getMasterSecret(String xmlFileName, String passphrase) {
+    static {
+        //Since Java 9 we set the unlimited crypto policy in code, not by applying the JCE jars.
+        Security.setProperty("crypto.policy", "unlimited");
+        //verify that JCE is applied
+
+        // init the BC security provider
+        if (Security.getProvider("BC") == null) {
+            Security.insertProviderAt(new BouncyCastleProvider(), 0);
+        }
+    }
+
+    public static MasterSecret getMasterSecret(File xmlFile, String passphrase) {
         try {
-            File xmlFile = new File(xmlFileName);
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(xmlFile);
